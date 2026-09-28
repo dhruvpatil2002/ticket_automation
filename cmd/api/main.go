@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
+	"syscall"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
 	"ticket_automation/internal/db"
@@ -17,27 +17,39 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	// Create context that listens for termination signals (Ctrl+C, Docker stop, SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	log.Println("Starting ticket automation service...")
+
+	// 1. Load environment configuration
 	if err := loadEnvironment(); err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to load environment: %v", err)
 	}
 
+	// 2. Initialize application timezone (IST / Asia/Kolkata)
 	if err := db.InitLocation(); err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to initialize location: %v", err)
 	}
 
-	pool, err := connectDB(ctx)
-	if err != nil {
-		log.Fatal(err)
+	// 3. Initialize database connection pool
+	if _, err := db.InitDB(ctx); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer pool.Close()
+	defer func() {
+		log.Println("Closing database connections...")
+		db.Close()
+	}()
 
-	db.DB = pool
-
+	// 4. Run worker tasks in parallel
+	startTime := time.Now()
+	log.Println("Executing workers in parallel...")
 	worker.RunInParallel(ctx)
+	log.Printf("All workers finished in %s", time.Since(startTime).Round(time.Millisecond))
 }
 
+// loadEnvironment searches for .env in the working directory, root directory, and base directories.
 func loadEnvironment() error {
 	_, currentFile, _, _ := runtime.Caller(0)
 	baseDir := filepath.Dir(currentFile)
@@ -53,67 +65,15 @@ func loadEnvironment() error {
 		candidatePaths = append([]string{filepath.Join(baseDir, "..", "ENV", ".env")}, candidatePaths...)
 	}
 
-	var loadedPath string
 	for _, path := range candidatePaths {
 		if _, err := os.Stat(path); err == nil {
 			if err := godotenv.Overload(path); err == nil {
-				loadedPath = path
-				log.Printf("Loaded environment variables from: %s", loadedPath)
+				log.Printf("Loaded environment variables from: %s", path)
 				return nil
 			}
 		}
 	}
 
-	log.Printf("Warning: .env file not found in searched paths: %v", candidatePaths)
+	log.Printf("Notice: No .env file found in candidates %v (using system environment)", candidatePaths)
 	return nil
-}
-
-func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	database := os.Getenv("DB_NAME")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASS")
-	sslMode := os.Getenv("DB_SSLMODE")
-
-	if port == "" {
-		port = os.Getenv("DB_PORT")
-	}
-
-	if sslMode == "" {
-		sslMode = os.Getenv("DB_SSLMODE")
-	}
-
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		user,
-		password,
-		host,
-		port,
-		database,
-		sslMode,
-	)
-
-	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	if maxConns := os.Getenv("DB_MAX_CONNS"); maxConns != "" {
-		if value, err := strconv.ParseUint(maxConns, 10, 32); err == nil {
-			config.MaxConns = int32(value)
-		}
-	}
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, err
-	}
-
-	return pool, nil
 }
