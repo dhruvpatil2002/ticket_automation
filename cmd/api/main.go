@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -42,23 +41,30 @@ func main() {
 func loadEnvironment() error {
 	_, currentFile, _, _ := runtime.Caller(0)
 	baseDir := filepath.Dir(currentFile)
+	rootDir := filepath.Dir(filepath.Dir(baseDir))
 
-	envPath := filepath.Join(baseDir, ".env")
-
-	if runtime.GOOS != "windows" {
-		envPath = filepath.Join(baseDir, "..", "ENV", ".env")
+	candidatePaths := []string{
+		".env",
+		filepath.Join(rootDir, ".env"),
+		filepath.Join(baseDir, ".env"),
 	}
 
-	log.Printf("Loading environment variables from: %s", envPath)
+	if runtime.GOOS != "windows" {
+		candidatePaths = append([]string{filepath.Join(baseDir, "..", "ENV", ".env")}, candidatePaths...)
+	}
 
-	if err := godotenv.Overload(envPath); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("Warning: .env file not found at %s", envPath)
-		} else {
-			return err
+	var loadedPath string
+	for _, path := range candidatePaths {
+		if _, err := os.Stat(path); err == nil {
+			if err := godotenv.Overload(path); err == nil {
+				loadedPath = path
+				log.Printf("Loaded environment variables from: %s", loadedPath)
+				return nil
+			}
 		}
 	}
 
+	log.Printf("Warning: .env file not found in searched paths: %v", candidatePaths)
 	return nil
 }
 
@@ -71,11 +77,11 @@ func connectDB(ctx context.Context) (*pgxpool.Pool, error) {
 	sslMode := os.Getenv("DB_SSLMODE")
 
 	if port == "" {
-		port = "5432"
+		port = os.Getenv("DB_PORT")
 	}
 
 	if sslMode == "" {
-		sslMode = "prefer"
+		sslMode = os.Getenv("DB_SSLMODE")
 	}
 
 	dsn := fmt.Sprintf(
