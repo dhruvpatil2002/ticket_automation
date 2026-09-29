@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -13,7 +13,7 @@ func ExpiredTickets(ctx context.Context) {
 
 	tx, err := DB.Begin(ctx)
 	if err != nil {
-		log.Printf("%s unable to begin transaction: %v", logPrefix(function), err)
+		fmt.Printf("%s unable to begin transaction: %v", logPrefix(function), err)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -27,12 +27,12 @@ func ExpiredTickets(ctx context.Context) {
 	`).Scan(&yottaMessage, &yottaClosedCount)
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		log.Printf("%s Yotta function failed: %v", logPrefix(function), err)
+		fmt.Printf("%s Yotta function failed: %v\n", logPrefix(function), err)
 		return
 	}
 
-	log.Printf(
-		"%s Expired Yotta Ticket - message=%v count=%v",
+	fmt.Printf(
+		"%s Expired Yotta Ticket - message=%v count=%v\n",
 		logPrefix(function),
 		yottaMessage,
 		yottaClosedCount,
@@ -47,21 +47,21 @@ func ExpiredTickets(ctx context.Context) {
 	`).Scan(&safeboxMessage, &safeboxClosedCount)
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		log.Printf("%s Safebox function failed: %v", logPrefix(function), err)
+		fmt.Printf("%s Safebox function failed: %v\n", logPrefix(function), err)
 		return
 	}
 
-	log.Printf(
-		"%s Expired Safebox Ticket - message=%v count=%v",
+	fmt.Printf(
+		"%s Expired Safebox Ticket - message=%v count=%v\n",
 		logPrefix(function),
 		safeboxMessage,
 		safeboxClosedCount,
 	)
 
 	if err := tx.Commit(ctx); err != nil {
-		log.Printf("%s commit failed: %v", logPrefix(function), err)
+		fmt.Printf("%s commit failed: %v", logPrefix(function), err)
 		return
 	}
 
-	log.Printf("%s Expired tickets processed successfully.", logPrefix(function))
+	fmt.Printf("%s Expired tickets processed successfully.\n", logPrefix(function))
 }

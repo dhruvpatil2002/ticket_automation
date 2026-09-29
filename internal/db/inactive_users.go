@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"time"
+
+	"ticket_automation/internal/models"
 )
 
 func InactiveUsers(ctx context.Context) {
@@ -11,7 +13,7 @@ func InactiveUsers(ctx context.Context) {
 
 	tx, err := DB.Begin(ctx)
 	if err != nil {
-		log.Printf("%s unable to begin transaction: %v", logPrefix(function), err)
+		fmt.Printf("%s unable to begin transaction: %v\n", logPrefix(function), err)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -35,13 +37,13 @@ func InactiveUsers(ctx context.Context) {
 		  AND u.username != 'no_agent'
 	`, compare15Min)
 	if err != nil {
-		log.Printf("%s inactive user query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s inactive user query failed: %v\n", logPrefix(function), err)
 		return
 	}
 	defer rows.Close()
 
 	profileIDs := make(map[int64]struct{})
-	ticketList := make([]Ticket, 0)
+	ticketList := make([]models.Ticket, 0)
 	ticketBUMap := make(map[int64]int64)
 	ticketOldUserMap := make(map[int64]int64)
 	buSet := make(map[int64]struct{})
@@ -57,14 +59,14 @@ func InactiveUsers(ctx context.Context) {
 			&buID,
 			&siteID,
 		); err != nil {
-			log.Printf("%s scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
 		profileIDs[profileID] = struct{}{}
 
 		if ticketID != nil {
-			ticketList = append(ticketList, Ticket{
+			ticketList = append(ticketList, models.Ticket{
 				ID:     *ticketID,
 				SiteID: siteID,
 			})
@@ -79,7 +81,7 @@ func InactiveUsers(ctx context.Context) {
 	}
 
 	if len(profileIDs) == 0 {
-		log.Printf("%s No inactive agents found.", logPrefix(function))
+		fmt.Printf("%s No inactive agents found.\n", logPrefix(function))
 		return
 	}
 
@@ -94,15 +96,15 @@ func InactiveUsers(ctx context.Context) {
 		WHERE id = ANY($1)
 	`, profileIDList)
 	if err != nil {
-		log.Printf("%s failed to mark users as shift-ended: %v", logPrefix(function), err)
+		fmt.Printf("%s failed to mark users as shift-ended: %v\n", logPrefix(function), err)
 		return
 	}
 
 	if len(ticketList) == 0 {
 		if err := tx.Commit(ctx); err != nil {
-			log.Printf("%s commit failed: %v", logPrefix(function), err)
+			fmt.Printf("%s commit failed: %v\n", logPrefix(function), err)
 		}
-		log.Printf("%s No tickets found for inactive users.", logPrefix(function))
+		fmt.Printf("%s No tickets found for inactive users.\n", logPrefix(function))
 		return
 	}
 
@@ -127,14 +129,14 @@ func InactiveUsers(ctx context.Context) {
 		  AND pbu.enterprise_id != 34
 	`, buIDs, compare5Min)
 	if err != nil {
-		log.Printf("%s available agent query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s available agent query failed: %v\n", logPrefix(function), err)
 		return
 	}
 
-	agentsByBU := make(map[int64][]Agent)
+	agentsByBU := make(map[int64][]models.Agent)
 
 	for rows.Next() {
-		var agent Agent
+		var agent models.Agent
 
 		if err := rows.Scan(
 			&agent.ProfileID,
@@ -142,7 +144,7 @@ func InactiveUsers(ctx context.Context) {
 			&agent.BUID,
 		); err != nil {
 			rows.Close()
-			log.Printf("%s available agent scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s available agent scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
@@ -161,12 +163,12 @@ func InactiveUsers(ctx context.Context) {
 			LIMIT 1
 		`)
 		if err != nil {
-			log.Printf("%s fallback agent query failed: %v", logPrefix(function), err)
+			fmt.Printf("%s fallback agent query failed: %v\n", logPrefix(function), err)
 			return
 		}
 
 		for rows.Next() {
-			var agent Agent
+			var agent models.Agent
 
 			if err := rows.Scan(
 				&agent.ProfileID,
@@ -174,7 +176,7 @@ func InactiveUsers(ctx context.Context) {
 				&agent.BUID,
 			); err != nil {
 				rows.Close()
-				log.Printf("%s fallback agent scan failed: %v", logPrefix(function), err)
+				fmt.Printf("%s fallback agent scan failed: %v\n", logPrefix(function), err)
 				return
 			}
 
@@ -184,14 +186,14 @@ func InactiveUsers(ctx context.Context) {
 	}
 
 	if len(agentsByBU) == 0 {
-		log.Printf("%s No available agents or fallback found.", logPrefix(function))
+		fmt.Printf("%s No available agents or fallback found.\n", logPrefix(function))
 		return
 	}
 
 	roundRobinIndex := make(map[int64]int)
-	parentToUser := make(map[int64]Agent)
+	parentToUser := make(map[int64]models.Agent)
 	profileAssignmentCount := make(map[int64]int)
-	assignments := make(map[int64]Agent)
+	assignments := make(map[int64]models.Agent)
 
 	for _, ticket := range ticketList {
 		buID, exists := ticketBUMap[ticket.ID]
@@ -226,7 +228,7 @@ func InactiveUsers(ctx context.Context) {
 		WHERE from_ticket_id = ANY($1)
 	`, parentIDs)
 	if err != nil {
-		log.Printf("%s child query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s child query failed: %v\n", logPrefix(function), err)
 		return
 	}
 
@@ -235,7 +237,7 @@ func InactiveUsers(ctx context.Context) {
 
 		if err := childRows.Scan(&fromID, &toID); err != nil {
 			childRows.Close()
-			log.Printf("%s child scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s child scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
@@ -254,7 +256,7 @@ func InactiveUsers(ctx context.Context) {
 		`, agent.UserID, currentTime, ticketID)
 
 		if err != nil {
-			log.Printf("%s ticket update failed: %v", logPrefix(function), err)
+			fmt.Printf("%s ticket update failed: %v\n", logPrefix(function), err)
 			return
 		}
 	}
@@ -267,7 +269,7 @@ func InactiveUsers(ctx context.Context) {
 		`, agent.UserID, ticketID)
 
 		if err != nil {
-			log.Printf("%s transaction update failed: %v", logPrefix(function), err)
+			fmt.Printf("%s transaction update failed: %v\n", logPrefix(function), err)
 			return
 		}
 	}
@@ -280,18 +282,18 @@ func InactiveUsers(ctx context.Context) {
 		`, count, profileID)
 
 		if err != nil {
-			log.Printf("%s profile update failed: %v", logPrefix(function), err)
+			fmt.Printf("%s profile update failed: %v\n", logPrefix(function), err)
 			return
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		log.Printf("%s commit failed: %v", logPrefix(function), err)
+		fmt.Printf("%s commit failed: %v\n", logPrefix(function), err)
 		return
 	}
 
-	log.Printf(
-		"%s Reassigned %d parent tickets.",
+	fmt.Printf(
+		"%s Reassigned %d parent tickets\n",
 		logPrefix(function),
 		len(parentToUser),
 	)

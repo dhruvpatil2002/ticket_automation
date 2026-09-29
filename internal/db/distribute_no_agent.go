@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"time"
 )
 
@@ -11,7 +11,7 @@ func DistributeNoAgent(ctx context.Context) {
 
 	tx, err := DB.Begin(ctx)
 	if err != nil {
-		log.Printf("%s unable to begin transaction: %v", logPrefix(function), err)
+		fmt.Printf("%s unable to begin transaction: %v\n", logPrefix(function), err)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -29,7 +29,7 @@ func DistributeNoAgent(ctx context.Context) {
 		  AND ps.enterprise_id != 34
 	`, NoAgentID)
 	if err != nil {
-		log.Printf("%s ticket query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s ticket query failed: %v\n", logPrefix(function), err)
 		return
 	}
 	defer rows.Close()
@@ -40,7 +40,7 @@ func DistributeNoAgent(ctx context.Context) {
 		var ticket Ticket
 
 		if err := rows.Scan(&ticket.ID, &ticket.SiteID); err != nil {
-			log.Printf("%s ticket scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s ticket scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
@@ -48,7 +48,7 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 
 	if len(tickets) == 0 {
-		log.Printf("%s No parent tickets to reassign.", logPrefix(function))
+		fmt.Printf("%s No parent tickets to reassign.\n", logPrefix(function))
 		return
 	}
 
@@ -65,7 +65,7 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 
 	if len(siteIDs) == 0 {
-		log.Printf("%s No valid site IDs found.", logPrefix(function))
+		fmt.Printf("%s No valid site IDs found.\n", logPrefix(function))
 		return
 	}
 
@@ -75,7 +75,7 @@ func DistributeNoAgent(ctx context.Context) {
 		WHERE id = ANY($1)
 	`, siteIDs)
 	if err != nil {
-		log.Printf("%s site query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s site query failed: %v\n", logPrefix(function), err)
 		return
 	}
 
@@ -86,7 +86,7 @@ func DistributeNoAgent(ctx context.Context) {
 
 		if err := rows.Scan(&siteID, &buID); err != nil {
 			rows.Close()
-			log.Printf("%s site scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s site scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
@@ -105,7 +105,7 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 
 	if len(buIDs) == 0 {
-		log.Printf("%s No BU IDs found.", logPrefix(function))
+		fmt.Printf("%s No BU IDs found.\n", logPrefix(function))
 		return
 	}
 
@@ -125,7 +125,7 @@ func DistributeNoAgent(ctx context.Context) {
 		  AND pbu.enterprise_id != 34
 	`, buIDs, compareTime)
 	if err != nil {
-		log.Printf("%s agent query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s agent query failed: %v\n", logPrefix(function), err)
 		return
 	}
 	defer rows.Close()
@@ -136,7 +136,7 @@ func DistributeNoAgent(ctx context.Context) {
 		var profileID, userID, buID int64
 
 		if err := rows.Scan(&profileID, &userID, &buID); err != nil {
-			log.Printf("%s agent scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s agent scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
@@ -158,7 +158,7 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 
 	if len(userQueue) == 0 {
-		log.Printf("%s No available agents found.", logPrefix(function))
+		fmt.Printf("%s No available agents found.\n", logPrefix(function))
 		return
 	}
 
@@ -188,8 +188,8 @@ func DistributeNoAgent(ctx context.Context) {
 		}
 
 		if len(eligible) == 0 {
-			log.Printf(
-				"%s BU:%d has no eligible agents for %d tickets.",
+			fmt.Printf(
+				"%s BU:%d has no eligible agents for %d tickets.\n",
 				logPrefix(function),
 				buID,
 				len(buTickets),
@@ -214,7 +214,7 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 
 	if len(assignments) == 0 {
-		log.Printf("%s No assignments generated.", logPrefix(function))
+		fmt.Printf("%s No assignments generated.\n", logPrefix(function))
 		return
 	}
 
@@ -229,7 +229,7 @@ func DistributeNoAgent(ctx context.Context) {
 		WHERE from_ticket_id = ANY($1)
 	`, parentIDs)
 	if err != nil {
-		log.Printf("%s child query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s child query failed: %v\n", logPrefix(function), err)
 		return
 	}
 
@@ -238,7 +238,7 @@ func DistributeNoAgent(ctx context.Context) {
 
 		if err := childRows.Scan(&fromID, &toID); err != nil {
 			childRows.Close()
-			log.Printf("%s child scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s child scan failed: %v\n", logPrefix(function), err)
 			return
 		}
 
@@ -264,7 +264,7 @@ func DistributeNoAgent(ctx context.Context) {
 		`, assignment.UserID, currentTime, assignment.TicketID)
 
 		if err != nil {
-			log.Printf("%s ticket update failed: %v", logPrefix(function), err)
+			fmt.Printf("%s ticket update failed: %v\n", logPrefix(function), err)
 			return
 		}
 	}
@@ -277,7 +277,7 @@ func DistributeNoAgent(ctx context.Context) {
 		`, assignment.UserID, assignment.TicketID)
 
 		if err != nil {
-			log.Printf("%s transaction update failed: %v", logPrefix(function), err)
+			fmt.Printf("%s transaction update failed: %v\n", logPrefix(function), err)
 			return
 		}
 	}
@@ -290,18 +290,18 @@ func DistributeNoAgent(ctx context.Context) {
 		`, len(ticketIDs), profileID)
 
 		if err != nil {
-			log.Printf("%s profile update failed: %v", logPrefix(function), err)
+			fmt.Printf("%s profile update failed: %v\n", logPrefix(function), err)
 			return
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		log.Printf("%s commit failed: %v", logPrefix(function), err)
+		fmt.Printf("%s commit failed: %v\n", logPrefix(function), err)
 		return
 	}
 
-	log.Printf(
-		"%s %d tickets reassigned to %d agents.",
+	fmt.Printf(
+		"%s %d tickets reassigned to %d agents.\n",
 		logPrefix(function),
 		len(assignments),
 		len(userQueue),

@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"log"
 )
 
 func GetClosedTransactions(ctx context.Context) {
@@ -11,7 +10,7 @@ func GetClosedTransactions(ctx context.Context) {
 
 	tx, err := DB.Begin(ctx)
 	if err != nil {
-		log.Printf("%s unable to begin transaction: %v", logPrefix(function), err)
+		fmt.Printf("%s unable to begin transaction: %v\n", logPrefix(function), err)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -46,7 +45,7 @@ func GetClosedTransactions(ctx context.Context) {
 		WHERE pt.closed = TRUE
 	`)
 	if err != nil {
-		log.Printf("%s query failed: %v", logPrefix(function), err)
+		fmt.Printf("%s query failed: %v\n", logPrefix(function), err)
 		return
 	}
 	defer rows.Close()
@@ -61,7 +60,7 @@ func GetClosedTransactions(ctx context.Context) {
 		var transactionID, parentID int64
 
 		if err := rows.Scan(&source, &transactionID, &parentID); err != nil {
-			log.Printf("%s scan failed: %v", logPrefix(function), err)
+			fmt.Printf("%s scan failed: %v,\n", logPrefix(function), err)
 			return
 		}
 
@@ -78,12 +77,12 @@ func GetClosedTransactions(ctx context.Context) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("%s rows failed: %v", logPrefix(function), err)
+		fmt.Printf("%s rows failed: %v\n", logPrefix(function), err)
 		return
 	}
 
 	if len(parentIDs) == 0 {
-		log.Printf("%s No closed transactions to process.", logPrefix(function))
+		fmt.Printf("%s No closed transactions to process.\n", logPrefix(function))
 		return
 	}
 
@@ -107,7 +106,7 @@ func GetClosedTransactions(ctx context.Context) {
 	`, parentIDList)
 
 	if err != nil {
-		log.Printf("%s child update failed: %v", logPrefix(function), err)
+		fmt.Printf("%s child update failed: %v\n", logPrefix(function), err)
 		return
 	}
 
@@ -126,27 +125,27 @@ func GetClosedTransactions(ctx context.Context) {
 	}
 
 	if err := deleteIDs("panel_ticketassignmenttransaction", normalIDs); err != nil {
-		log.Printf("%s normal transaction delete failed: %v", logPrefix(function), err)
+		fmt.Printf("%s normal transaction delete failed: %v\n", logPrefix(function), err)
 		return
 	}
 
 	if err := deleteIDs("panel_ticketassignmenttransaction_safebox", safeboxIDs); err != nil {
-		log.Printf("%s safebox transaction delete failed: %v", logPrefix(function), err)
+		fmt.Printf("%s safebox transaction delete failed: %v\n", logPrefix(function), err)
 		return
 	}
 
 	if err := deleteIDs("panel_ticketassignmenttransaction_safeboxai", safeboxAIIDs); err != nil {
-		log.Printf("%s safebox AI transaction delete failed: %v", logPrefix(function), err)
+		fmt.Printf("%s safebox AI transaction delete failed: %v\n", logPrefix(function), err)
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		log.Printf("%s commit failed: %v", logPrefix(function), err)
+		fmt.Printf("%s commit failed: %v\n", logPrefix(function), err)
 		return
 	}
 
-	log.Printf(
-		"%s Processed %d normal, %d safebox and %d safebox AI transactions.",
+	fmt.Printf(
+		"%s Processed %d normal, %d safebox and %d safebox AI transactions.\n",
 		logPrefix(function),
 		len(normalIDs),
 		len(safeboxIDs),
