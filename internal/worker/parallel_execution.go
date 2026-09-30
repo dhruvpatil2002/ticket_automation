@@ -2,12 +2,11 @@ package worker
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"sync"
 
-	 "ticket_automation/internal/db"
-)	
-
+	"ticket_automation/internal/db"
+)
 
 func RunInParallel(ctx context.Context) {
 	var wg sync.WaitGroup
@@ -16,7 +15,11 @@ func RunInParallel(ctx context.Context) {
 		db.GetClosedTransactions,
 		db.DistributeNoAgent,
 		db.InactiveUsers,
-		db.ExpiredTickets,
+		func(ctx context.Context) {
+			if err := db.ExpiredTickets(ctx); err != nil {
+				fmt.Printf("ExpiredTickets error: %v\n", err)
+			}
+		},
 	}
 
 	wg.Add(len(workers))
@@ -27,10 +30,7 @@ func RunInParallel(ctx context.Context) {
 
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					log.Printf(
-						"Worker panic: %v",
-						recovered,
-					)
+					fmt.Printf("Worker panic: %v\n", recovered)
 				}
 			}()
 

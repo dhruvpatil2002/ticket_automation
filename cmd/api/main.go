@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,32 +21,35 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Println("Starting ticket automation service...")
+	fmt.Println("Starting ticket automation service...")
 
 	// 1. Load environment configuration
 	if err := loadEnvironment(); err != nil {
-		log.Fatalf("Failed to load environment: %v", err)
+		fmt.Printf("Failed to load environment: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 2. Initialize application timezone (IST / Asia/Kolkata)
 	if err := db.InitLocation(); err != nil {
-		log.Fatalf("Failed to initialize location: %v", err)
+		fmt.Printf("Failed to initialize location: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 3. Initialize database connection pool
 	if _, err := db.InitDB(ctx); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		fmt.Printf("Failed to connect to database: %v\n", err)
+		os.Exit(1)
 	}
 	defer func() {
-		log.Println("Closing database connections...")
+		fmt.Println("Closing database connections...")
 		db.Close()
 	}()
 
 	// 4. Run worker tasks in parallel
 	startTime := time.Now()
-	log.Println("Executing workers in parallel...")
+	fmt.Println("Executing workers in parallel...")
 	worker.RunInParallel(ctx)
-	log.Printf("All workers finished in %s", time.Since(startTime).Round(time.Millisecond))
+	fmt.Printf("All workers finished in %s\n", time.Since(startTime).Round(time.Millisecond))
 }
 
 // loadEnvironment searches for .env in the working directory, root directory, and base directories.
@@ -68,12 +71,12 @@ func loadEnvironment() error {
 	for _, path := range candidatePaths {
 		if _, err := os.Stat(path); err == nil {
 			if err := godotenv.Overload(path); err == nil {
-				log.Printf("Loaded environment variables from: %s", path)
+				fmt.Printf("Loaded environment variables from: %s\n", path)
 				return nil
 			}
 		}
 	}
 
-	log.Printf("Notice: No .env file found in candidates %v (using system environment)", candidatePaths)
+	fmt.Printf("Notice: No .env file found in candidates %v (using system environment)\n", candidatePaths)
 	return nil
 }

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"ticket_automation/internal/models"
 	"time"
 )
 
@@ -34,10 +35,10 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 	defer rows.Close()
 
-	var tickets []Ticket
+	var tickets []models.Ticket
 
 	for rows.Next() {
-		var ticket Ticket
+		var ticket models.Ticket
 
 		if err := rows.Scan(&ticket.ID, &ticket.SiteID); err != nil {
 			fmt.Printf("%s ticket scan failed: %v\n", logPrefix(function), err)
@@ -114,9 +115,9 @@ func DistributeNoAgent(ctx context.Context) {
 		FROM panel_user_profile up
 		JOIN auth_user u ON up.user_id = u.id
 		JOIN panel_user_profile_bu bub
-			ON bub.user_profile_id = up.id
+		ON bub.user_profile_id = up.id
 		JOIN panel_business_unit pbu
-			ON pbu.id = bub.business_unit_id
+		ON pbu.id = bub.business_unit_id
 		WHERE up.on_break = FALSE
 		  AND up.on_shift_end = FALSE
 		  AND up.role = 'agent'
@@ -130,7 +131,7 @@ func DistributeNoAgent(ctx context.Context) {
 	}
 	defer rows.Close()
 
-	userBUMap := make(map[UserKey]map[int64]struct{})
+	userBUMap := make(map[models.UserKey]map[int64]struct{})
 
 	for rows.Next() {
 		var profileID, userID, buID int64
@@ -140,7 +141,7 @@ func DistributeNoAgent(ctx context.Context) {
 			return
 		}
 
-		key := UserKey{
+		key := models.UserKey{
 			ProfileID: profileID,
 			UserID:    userID,
 		}
@@ -152,7 +153,7 @@ func DistributeNoAgent(ctx context.Context) {
 		userBUMap[key][buID] = struct{}{}
 	}
 
-	userQueue := make([]UserKey, 0, len(userBUMap))
+	userQueue := make([]models.UserKey, 0, len(userBUMap))
 	for user := range userBUMap {
 		userQueue = append(userQueue, user)
 	}
@@ -162,7 +163,7 @@ func DistributeNoAgent(ctx context.Context) {
 		return
 	}
 
-	buTicketMap := make(map[int64][]Ticket)
+	buTicketMap := make(map[int64][]models.Ticket)
 
 	for _, ticket := range tickets {
 		if ticket.SiteID == nil {
@@ -174,12 +175,12 @@ func DistributeNoAgent(ctx context.Context) {
 		}
 	}
 
-	var assignments []Assignment
-	parentToUser := make(map[int64]Assignment)
+	var assignments []models.Assignment
+	parentToUser := make(map[int64]models.Assignment)
 	ticketsPerProfile := make(map[int64][]int64)
 
 	for buID, buTickets := range buTicketMap {
-		var eligible []UserKey
+		var eligible []models.UserKey
 
 		for _, user := range userQueue {
 			if _, exists := userBUMap[user][buID]; exists {
@@ -200,7 +201,7 @@ func DistributeNoAgent(ctx context.Context) {
 		for index, ticket := range buTickets {
 			user := eligible[index%len(eligible)]
 
-			assignment := Assignment{
+			assignment := models.Assignment{
 				TicketID:  ticket.ID,
 				UserID:    user.UserID,
 				ProfileID: user.ProfileID,
@@ -243,7 +244,7 @@ func DistributeNoAgent(ctx context.Context) {
 		}
 
 		if parentAssignment, exists := parentToUser[fromID]; exists {
-			assignments = append(assignments, Assignment{
+			assignments = append(assignments, models.Assignment{
 				TicketID:  toID,
 				UserID:    parentAssignment.UserID,
 				ProfileID: parentAssignment.ProfileID,

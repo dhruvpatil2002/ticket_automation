@@ -6,7 +6,8 @@ import (
 )
 
 func GetClosedTransactions(ctx context.Context) {
-	const function = "get_closed_transactions"
+
+	const function = "closed_transactions"
 
 	tx, err := DB.Begin(ctx)
 	if err != nil {
